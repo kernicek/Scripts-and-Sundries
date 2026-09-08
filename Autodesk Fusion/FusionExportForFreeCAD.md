@@ -13,9 +13,12 @@ you want to export first; the script then asks for an output folder and writes:
 - `<design>.step` - whole design as one static solid (fit-check/printing use)
 - `sketches/*.dxf` - every sketch, one DXF each, re-traceable in FreeCAD
 - `model.json` - user parameters, the full timeline in feature order (each feature's type,
-  operation, and driving dimensions via Fusion's generic `parameters` collection, plus
-  edge/face counts for fillets/chamfers), component/body list, occurrence tree with
-  transforms, and joints
+  operation, driving dimensions via Fusion's generic `parameters` collection, plus
+  type-specific detail: extrude extents/distances, chamfer edge-set distances, pattern
+  quantities/spacing and input names, combine target/tool body names, split-tool name,
+  construction plane offset/reference), component/body list (each body's name, visibility,
+  appearance/material name, volume, area, bounding box), occurrence tree with transforms,
+  and joints
 
 Use `model.json` as the reference while manually rebuilding the feature tree in FreeCAD's
 Part Design workbench: import each DXF as a sketch trace, re-add constraints, redo
@@ -31,3 +34,12 @@ for dimensions.
 - Every Fusion API property access is wrapped defensively, but some fields (especially under
   `joints`/`jointMotion`) haven't been verified against every Fusion API version - a `null`
   where you expected a value likely means that property name needs adjusting.
+- The first version of this script always omitted `parameters` on every timeline feature
+  (an `if params:` truthiness check against an always-empty-ish API collection object).
+  Fixed 2026-09-08 to check `params is not None` instead - re-export if your `model.json`
+  predates this fix and has no per-feature `parameters`.
+- Body-level `appearanceName`/`materialName` reflect whatever look/material is assigned per
+  body in Fusion - a reasonable stand-in for "which print-color group a body belongs to"
+  since body folders themselves aren't exposed by the API.
+- `volume`/`area`/`boundingBox` on each body are in the API's internal database units (cm,
+  cm^3), not `lengthUnits` - convert when cross-checking against the design's own units.

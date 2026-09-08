@@ -47,14 +47,54 @@ def dump_parameter(p):
     }
 
 
-def dump_feature(entity):
+def dump_extent_definition(ext):
+    if ext is None:
+        return None
+    data = {'classType': safe(lambda: ext.classType())}
+    dist = safe(lambda: ext.distance)
+    if dist is not None:
+        data['distance'] = dump_parameter(dist)
+    entity = safe(lambda: ext.entity)
+    if entity is not None:
+        data['toEntity'] = safe(lambda: entity.name) or safe(lambda: entity.classType())
+    is_chained = safe(lambda: ext.isChained)
+    if is_chained is not None:
+        data['isChained'] = is_chained
+    return data
+
+
+def dump_body_ref(body):
+    if body is None:
+        return None
+    return safe(lambda: body.name)
+
+
+def dump_edge_set(edge_set):
+    data = {'classType': safe(lambda: edge_set.classType())}
+    for attr in ('distance', 'distanceOne', 'distanceTwo'):
+        p = safe(lambda: getattr(edge_set, attr))
+        if p is not None:
+            data[attr] = dump_parameter(p)
+    angle = safe(lambda: edge_set.angle)
+    if angle is not None:
+        data['angle'] = dump_parameter(angle)
+    edges = safe(lambda: edge_set.edges)
+    if edges is not None:
+        data['edges_count'] = safe(lambda: edges.count)
+    return data
+
+
+def dump_feature(entity, class_type):
     data = {'classType': safe(lambda: entity.classType())}
     op = safe(lambda: entity.operation)
     if op is not None:
         data['operation'] = str(op)
     params = safe(lambda: entity.parameters)
-    if params:
-        data['parameters'] = [dump_parameter(params.item(i)) for i in range(params.count)]
+    if params is not None:
+        count = safe(lambda: params.count, 0) or 0
+        dumped = [dump_parameter(params.item(i)) for i in range(count)]
+        if dumped:
+            data['parameters'] = dumped
     for coll_name in ('edges', 'faces', 'inputBodies', 'participantBodies', 'bodies'):
         coll = safe(lambda: getattr(entity, coll_name))
         if coll is not None:
@@ -64,6 +104,75 @@ def dump_feature(entity):
     axis = safe(lambda: entity.axis)
     if axis is not None:
         data['axis'] = jsonable(safe(lambda: axis.geometry) or axis)
+
+    if class_type == 'adsk::fusion::ExtrudeFeature':
+        ext_type = safe(lambda: entity.extentType)
+        if ext_type is not None:
+            data['extentType'] = str(ext_type)
+        e1 = safe(lambda: entity.extentOne)
+        if e1 is not None:
+            data['extentOne'] = dump_extent_definition(e1)
+        e2 = safe(lambda: entity.extentTwo)
+        if e2 is not None:
+            data['extentTwo'] = dump_extent_definition(e2)
+        taper = safe(lambda: entity.taperAngleOne)
+        if taper is not None:
+            data['taperAngleOne'] = dump_parameter(taper)
+        bodies = safe(lambda: entity.bodies)
+        if bodies is not None:
+            data['outputBodyNames'] = [safe(lambda: bodies.item(i).name)
+                                        for i in range(safe(lambda: bodies.count, 0) or 0)]
+
+    elif class_type == 'adsk::fusion::ChamferFeature':
+        edge_sets = safe(lambda: entity.chamferEdgeSets)
+        if edge_sets is not None:
+            data['edgeSets'] = [dump_edge_set(edge_sets.item(i))
+                                 for i in range(safe(lambda: edge_sets.count, 0) or 0)]
+
+    elif class_type == 'adsk::fusion::RectangularPatternFeature':
+        for attr in ('quantityOne', 'quantityTwo', 'distanceOne', 'distanceTwo'):
+            p = safe(lambda: getattr(entity, attr))
+            if p is not None:
+                data[attr] = dump_parameter(p)
+        compute_option = safe(lambda: entity.patternComputeOption)
+        if compute_option is not None:
+            data['patternComputeOption'] = str(compute_option)
+        inputs = safe(lambda: entity.inputEntities)
+        if inputs is not None:
+            data['inputEntityNames'] = [safe(lambda: inputs.item(i).name)
+                                         for i in range(safe(lambda: inputs.count, 0) or 0)]
+
+    elif class_type == 'adsk::fusion::CombineFeature':
+        data['targetBodyName'] = dump_body_ref(safe(lambda: entity.targetBody))
+        tools = safe(lambda: entity.toolBodies)
+        if tools is not None:
+            data['toolBodyNames'] = [dump_body_ref(tools.item(i))
+                                      for i in range(safe(lambda: tools.count, 0) or 0)]
+        is_new_comp = safe(lambda: entity.isNewComponent)
+        if is_new_comp is not None:
+            data['isNewComponent'] = is_new_comp
+
+    elif class_type == 'adsk::fusion::SplitBodyFeature':
+        tool = safe(lambda: entity.splittingTool)
+        if tool is not None:
+            data['splittingToolName'] = safe(lambda: tool.name) or safe(lambda: tool.classType())
+        participants = safe(lambda: entity.participantBodies)
+        if participants is not None:
+            data['participantBodyNames'] = [dump_body_ref(participants.item(i))
+                                             for i in range(safe(lambda: participants.count, 0) or 0)]
+
+    elif class_type == 'adsk::fusion::ConstructionPlane':
+        definition = safe(lambda: entity.definition)
+        if definition is not None:
+            def_data = {'classType': safe(lambda: definition.classType())}
+            offset = safe(lambda: definition.offset)
+            if offset is not None:
+                def_data['offset'] = dump_parameter(offset)
+            plane_entity = safe(lambda: definition.planarEntity)
+            if plane_entity is not None:
+                def_data['planarEntity'] = safe(lambda: plane_entity.name) or safe(lambda: plane_entity.classType())
+            data['definition'] = def_data
+
     return data
 
 
@@ -120,7 +229,7 @@ def dump_timeline(design, sketches_dir, exported_files):
             elif class_type == 'adsk::fusion::Occurrence':
                 entry['entity'] = dump_occurrence_entity(entity)
             elif hasattr(entity, 'parameters') or 'Feature' in (class_type or ''):
-                entry['entity'] = dump_feature(entity)
+                entry['entity'] = dump_feature(entity, class_type)
             else:
                 entry['entity'] = {'classType': class_type, 'name': safe(lambda: entity.name)}
         except Exception:
@@ -129,15 +238,43 @@ def dump_timeline(design, sketches_dir, exported_files):
     return items
 
 
+def dump_bounding_box(bbox):
+    if bbox is None:
+        return None
+    return {
+        'minPoint': jsonable(safe(lambda: bbox.minPoint)),
+        'maxPoint': jsonable(safe(lambda: bbox.maxPoint)),
+    }
+
+
+def dump_body(body):
+    data = {
+        'name': safe(lambda: body.name),
+        'isVisible': safe(lambda: body.isVisible),
+    }
+    appearance = safe(lambda: body.appearance)
+    if appearance is not None:
+        data['appearanceName'] = safe(lambda: appearance.name)
+    material = safe(lambda: body.material)
+    if material is not None:
+        data['materialName'] = safe(lambda: material.name)
+    props = safe(lambda: body.physicalProperties)
+    if props is not None:
+        data['volume'] = safe(lambda: props.volume)
+        data['area'] = safe(lambda: props.area)
+        data['boundingBox'] = dump_bounding_box(safe(lambda: body.boundingBox))
+    return data
+
+
 def dump_components(design):
     comps = []
     for comp in design.allComponents:
         sketch_names = [safe(lambda: s.name) for s in comp.sketches]
-        body_names = [safe(lambda: b.name) for b in comp.bRepBodies]
+        bodies = [dump_body(b) for b in comp.bRepBodies]
         comps.append({
             'name': safe(lambda: comp.name),
             'sketches': sketch_names,
-            'bodies': body_names,
+            'bodies': bodies,
         })
     return comps
 
