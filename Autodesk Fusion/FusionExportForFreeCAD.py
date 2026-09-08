@@ -151,6 +151,27 @@ def dump_feature(entity, class_type, item, timeline):
             data['outputBodyNames'] = [safe(lambda: bodies.item(i).name)
                                         for i in range(safe(lambda: bodies.count, 0) or 0)]
 
+        def read_profiles():
+            prof = safe(lambda: entity.profile)
+            if prof is None:
+                return None
+            count = safe(lambda: prof.count)
+            items = [prof.item(i) for i in range(count)] if count is not None else [prof]
+            refs = []
+            for p_item in items:
+                entry = {'classType': safe(lambda: p_item.classType())}
+                sketch = safe(lambda: p_item.parentSketch)
+                if sketch is not None:
+                    entry['sketchName'] = safe(lambda: sketch.name)
+                bbox = safe(lambda: p_item.boundingBox)
+                if bbox is not None:
+                    entry['boundingBox'] = dump_bounding_box(bbox)
+                refs.append(entry)
+            return refs
+        profiles = read_with_rollback(item, timeline, read_profiles)
+        if profiles is not None:
+            data['profiles'] = profiles
+
     elif class_type == 'adsk::fusion::ChamferFeature':
         edge_sets = safe(lambda: entity.edgeSets)
         if edge_sets is not None:

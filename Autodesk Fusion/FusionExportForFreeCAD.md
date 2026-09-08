@@ -19,7 +19,10 @@ you want to export first; the script then asks for an output folder and writes:
   operation, driving dimensions via Fusion's generic `parameters` collection, plus
   type-specific detail: extrude extents/distances, chamfer edge-set distances, pattern
   quantities/spacing and input names, combine target/tool body names, split-tool name,
-  construction plane offset/reference), each sketch's plane placement in model space
+  construction plane offset/reference, and now which sketch/profile-region each extrude
+  actually consumes via `ExtrudeFeature.profile` -> `parentSketch` + the profile's own
+  bounding box - needed to disambiguate sketches with more than one closed region), each
+  sketch's plane placement in model space
   (`origin`/`xDirection`/`yDirection` - needed to re-place the DXF correctly in 3D, since
   `referencePlane` alone resolves to null for sketches on a face rather than a named
   construction plane), component/body list (each body's name, visibility, appearance/
