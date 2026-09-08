@@ -11,6 +11,9 @@ Fusion -> Utilities tab -> Scripts and Add-Ins -> Scripts -> "+" (Create) -> pas
 you want to export first; the script then asks for an output folder and writes:
 
 - `<design>.step` - whole design as one static solid (fit-check/printing use)
+- `<design>.f3d` - full Fusion archive (native format, includes the parametric feature
+  history) - an offline backup of the source design outside Autodesk's cloud, re-importable
+  into any Fusion install via File > Open. Not consumed by FreeCAD; this is purely a backup.
 - `sketches/*.dxf` - every sketch, one DXF each, re-traceable in FreeCAD
 - `model.json` - user parameters, the full timeline in feature order (each feature's type,
   operation, driving dimensions via Fusion's generic `parameters` collection, plus
@@ -27,9 +30,11 @@ for dimensions.
 
 ## Caveats
 
-- Fusion's free Personal Use plan has, at various times, restricted STEP/IGES/SAT export.
-  If the STEP export call fails, the script logs the error into `model.json` and still
-  writes the DXFs and JSON - check File > Export in the UI to see what your account allows.
+- Fusion's free Personal Use plan has, at various times, restricted STEP/IGES/SAT export
+  (the Fusion archive/.f3d export is Fusion's own native format and isn't known to be
+  restricted the same way). If either export call fails, the script logs the error into
+  `model.json` and still writes everything else - check File > Export in the UI to see
+  what your account allows.
 - Confirmed working (STEP export included) on a Personal Use account, 2026-09-08.
 - Every Fusion API property access is wrapped defensively, but some fields (especially under
   `joints`/`jointMotion`) haven't been verified against every Fusion API version - a `null`
@@ -53,7 +58,9 @@ for dimensions.
   your `model.json` predates this fix, re-export.
 - Body-level `appearanceName`/`materialName` reflect whatever look/material is assigned per
   body in Fusion - a reasonable stand-in for "which print-color group a body belongs to"
-  since body folders themselves aren't exposed by the API.
+  since body folders themselves aren't exposed by the API. If body names already encode
+  the folder/variant (e.g. a naming convention like `PRAHA_A_...`), that's more reliable
+  than appearance and should be preferred when present.
 - `volume`/`area`/`boundingBox` on each body are in the API's internal database units (cm,
   cm^3), not `lengthUnits` - convert when cross-checking against the design's own units.
 - The rollback described above means the export visibly scrubs the 3D view back and forth

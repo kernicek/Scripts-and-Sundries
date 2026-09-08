@@ -373,13 +373,21 @@ def run(context):
 
         errors = []
 
+        export_mgr = design.exportManager
+
         step_path = os.path.join(out_dir, design_name + '.step')
         try:
-            export_mgr = design.exportManager
             step_options = export_mgr.createSTEPExportOptions(step_path, root)
             export_mgr.execute(step_options)
         except Exception:
             errors.append('STEP export failed (Personal Use plan may restrict it): ' + traceback.format_exc())
+
+        f3d_path = os.path.join(out_dir, design_name + '.f3d')
+        try:
+            archive_options = export_mgr.createFusionArchiveExportOptions(f3d_path, root)
+            export_mgr.execute(archive_options)
+        except Exception:
+            errors.append('Fusion archive (.f3d) export failed: ' + traceback.format_exc())
 
         exported_dxf_files = []
         model = {
@@ -401,9 +409,11 @@ def run(context):
         summary = (
             'Exported to {0}\n'
             '- STEP: {1}\n'
-            '- Sketch DXFs: {2}\n'
+            '- Fusion archive (.f3d): {2}\n'
+            '- Sketch DXFs: {3}\n'
             '- model.json (parameters/timeline/assembly)\n'
         ).format(out_dir, 'ok' if os.path.exists(step_path) else 'FAILED (see errors in model.json)',
+                 'ok' if os.path.exists(f3d_path) else 'FAILED (see errors in model.json)',
                  len(exported_dxf_files))
         if errors:
             summary += '\n{0} error(s) logged in model.json.'.format(len(errors))
