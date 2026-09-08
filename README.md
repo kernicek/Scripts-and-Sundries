@@ -8,3 +8,6 @@ grows enough companion files to need one.
 ## What's here
 
 - `Autodesk Fusion/` — scripts that run inside Fusion 360's Python API.
+- `Filesystem/` — generic filesystem tools (Unicode-normalization duplicate-folder detection).
+- `Immich/` — scripts against the Immich photo-management API.
+- `Lenovo Yoga Pro/` — EC/fan reverse-engineering and power-limit measurement for a Yoga Pro 9 14IRP8.
