@@ -1,0 +1,64 @@
+--- yogafan.c	2026-07-30 16:58:22.537848387 +0200
++++ yogafan-patched/yogafan_patched.c	2026-07-30 17:00:40.567549610 +0200
+@@ -41,7 +41,7 @@
+ struct yogafan_config {
+ 	int multiplier;
+ 	int fan_count;
+-	const char *paths[2];
++	const char *paths[6];
+ };
+
+ struct yoga_fan_data {
+@@ -71,6 +71,21 @@
+ 	.paths = { "\\_SB.PCI0.LPC0.EC0.FANS", "\\_SB.PCI0.LPC0.EC0.FA2S" }
+ };
+
++/*
++ * Yoga Pro 9 14IRP8 (83BU) and other newer Intel platforms use the PC00/LPCB
++ * ACPI naming instead of the PCI0/LPC0 the stock configs assume. The FANS
++ * object itself is present and identical; only the path differs. Extra
++ * candidates are harmless: acpi_get_handle simply fails and the path is skipped.
++ */
++static const struct yogafan_config yoga_pc00_cfg = {
++	.multiplier = 100,
++	.fan_count = 4,
++	.paths = { "\\_SB.PC00.LPCB.EC0.FANS",
++		   "\\_SB.PC00.LPCB.EC0.FA2S",
++		   "\\_SB.PC00.LPCB.H_EC.FANS",
++		   "\\_SB.PC00.LPCB.H_EC.FA2S" }
++};
++
+ static void apply_rllag_filter(struct yoga_fan_data *data, int idx, long raw_rpm)
+ {
+ 	ktime_t now = ktime_get_boottime();
+@@ -171,6 +186,14 @@
+
+ static const struct dmi_system_id yogafan_quirks[] = {
+ 	{
++		.ident = "Lenovo Yoga Pro 9 14IRP8",
++		.matches = {
++			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
++			DMI_MATCH(DMI_PRODUCT_NAME, "83BU"),
++		},
++		.driver_data = (void *)&yoga_pc00_cfg,
++	},
++	{
+ 		.ident = "Lenovo Yoga",
+ 		.matches = {
+ 			DMI_MATCH(DMI_SYS_VENDOR, "LENOVO"),
+@@ -222,6 +245,8 @@
+
+ 		status = acpi_get_handle(NULL, (char *)cfg->paths[i],
+ 					 &data->active_handles[data->fan_count]);
++		pr_info("yogafan: path %s -> %s\n", cfg->paths[i],
++			ACPI_SUCCESS(status) ? "FOUND" : "absent");
+ 		if (ACPI_SUCCESS(status))
+ 			data->fan_count++;
+ 	}
+@@ -271,5 +296,5 @@
+ module_exit(yoga_fan_exit);
+
+ MODULE_AUTHOR("Sergio Melas <sergiomelas@gmail.com>");
+-MODULE_DESCRIPTION("Lenovo Yoga/Legion Fan Monitor Driver");
++MODULE_DESCRIPTION("Lenovo Yoga/Legion Fan Monitor Driver (PC00 path patch)");
+ MODULE_LICENSE("GPL");
