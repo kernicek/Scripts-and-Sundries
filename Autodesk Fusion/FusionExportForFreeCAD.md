@@ -36,10 +36,27 @@ for dimensions.
   where you expected a value likely means that property name needs adjusting.
 - The first version of this script always omitted `parameters` on every timeline feature
   (an `if params:` truthiness check against an always-empty-ish API collection object).
-  Fixed 2026-09-08 to check `params is not None` instead - re-export if your `model.json`
-  predates this fix and has no per-feature `parameters`.
+  Fixed 2026-09-08 to check `params is not None` instead - though in practice Fusion's
+  generic `Feature.parameters` collection is empty for most feature types anyway; the
+  real dimensions live on type-specific sub-objects, which is what the type-specific
+  detail (extentOne/edgeSets/quantityOne/etc.) actually pulls from.
+- Second round of fixes, also 2026-09-08, against the real Fusion API stubs
+  (github.com/AutodeskFusion360/FusionAPIReference): `ChamferFeature.edgeSets` (not
+  `chamferEdgeSets`), `SplitBodyFeature.splitBodies` (not `participantBodies`), and a
+  routing bug that skipped `ConstructionPlane.definition` entirely (it isn't a `Feature`
+  subtype, so it never reached the feature-detail dumper). Also: `CombineFeature.targetBody`/
+  `toolBodies`, `SplitBodyFeature.splittingTool`, `RectangularPatternFeature.inputEntities`,
+  `ChamferEdgeSet.edges`, and `CopyPasteBody.sourceBody` only resolve correctly with the
+  timeline marker rolled back to immediately before that feature (Autodesk's own docs note
+  this per-property); the script now does `item.rollTo(True)` before reading these and
+  `timeline.moveToEnd()` afterward every time, restoring the full model at the end. If
+  your `model.json` predates this fix, re-export.
 - Body-level `appearanceName`/`materialName` reflect whatever look/material is assigned per
   body in Fusion - a reasonable stand-in for "which print-color group a body belongs to"
   since body folders themselves aren't exposed by the API.
 - `volume`/`area`/`boundingBox` on each body are in the API's internal database units (cm,
   cm^3), not `lengthUnits` - convert when cross-checking against the design's own units.
+- The rollback described above means the export visibly scrubs the 3D view back and forth
+  through the timeline as it runs (once per Combine/Split/Pattern/CopyPasteBody/Chamfer
+  feature) - that's expected, not a hang; it's navigation only, nothing is edited, and the
+  script always ends by moving the marker back to the end of the timeline.

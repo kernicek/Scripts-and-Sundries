@@ -84,7 +84,35 @@ def dump_edge_set(edge_set):
     return data
 
 
-def dump_feature(entity, class_type):
+def read_with_rollback(item, timeline, fn):
+    """Several Fusion properties (body/edge references consumed by later
+    features) only resolve correctly with the timeline marker positioned
+    immediately before the owning feature - see e.g. CombineFeature.targetBody.
+    Rolls back, reads, then always restores the marker to the end.
+    """
+    rolled = safe(lambda: item.rollTo(True))
+    try:
+        return safe(fn) if rolled else None
+    finally:
+        safe(lambda: timeline.moveToEnd())
+
+
+def dump_construction_plane(entity):
+    data = {'classType': safe(lambda: entity.classType()), 'name': safe(lambda: entity.name)}
+    definition = safe(lambda: entity.definition)
+    if definition is not None:
+        def_data = {'classType': safe(lambda: definition.classType())}
+        offset = safe(lambda: definition.offset)
+        if offset is not None:
+            def_data['offset'] = dump_parameter(offset)
+        plane_entity = safe(lambda: definition.planarEntity)
+        if plane_entity is not None:
+            def_data['planarEntity'] = safe(lambda: plane_entity.name) or safe(lambda: plane_entity.classType())
+        data['definition'] = def_data
+    return data
+
+
+def dump_feature(entity, class_type, item, timeline):
     data = {'classType': safe(lambda: entity.classType())}
     op = safe(lambda: entity.operation)
     if op is not None:
@@ -124,10 +152,12 @@ def dump_feature(entity, class_type):
                                         for i in range(safe(lambda: bodies.count, 0) or 0)]
 
     elif class_type == 'adsk::fusion::ChamferFeature':
-        edge_sets = safe(lambda: entity.chamferEdgeSets)
+        edge_sets = safe(lambda: entity.edgeSets)
         if edge_sets is not None:
-            data['edgeSets'] = [dump_edge_set(edge_sets.item(i))
-                                 for i in range(safe(lambda: edge_sets.count, 0) or 0)]
+            def read_edge_sets():
+                return [dump_edge_set(edge_sets.item(i))
+                        for i in range(safe(lambda: edge_sets.count, 0) or 0)]
+            data['edgeSets'] = read_with_rollback(item, timeline, read_edge_sets)
 
     elif class_type == 'adsk::fusion::RectangularPatternFeature':
         for attr in ('quantityOne', 'quantityTwo', 'distanceOne', 'distanceTwo'):
@@ -137,41 +167,53 @@ def dump_feature(entity, class_type):
         compute_option = safe(lambda: entity.patternComputeOption)
         if compute_option is not None:
             data['patternComputeOption'] = str(compute_option)
-        inputs = safe(lambda: entity.inputEntities)
-        if inputs is not None:
-            data['inputEntityNames'] = [safe(lambda: inputs.item(i).name)
-                                         for i in range(safe(lambda: inputs.count, 0) or 0)]
+
+        def read_pattern_inputs():
+            inputs = safe(lambda: entity.inputEntities)
+            if inputs is None:
+                return None
+            return [safe(lambda: inputs.item(i).name)
+                    for i in range(safe(lambda: inputs.count, 0) or 0)]
+        input_names = read_with_rollback(item, timeline, read_pattern_inputs)
+        if input_names is not None:
+            data['inputEntityNames'] = input_names
 
     elif class_type == 'adsk::fusion::CombineFeature':
-        data['targetBodyName'] = dump_body_ref(safe(lambda: entity.targetBody))
-        tools = safe(lambda: entity.toolBodies)
-        if tools is not None:
-            data['toolBodyNames'] = [dump_body_ref(tools.item(i))
-                                      for i in range(safe(lambda: tools.count, 0) or 0)]
+        def read_combine():
+            result = {'targetBodyName': dump_body_ref(safe(lambda: entity.targetBody))}
+            tools = safe(lambda: entity.toolBodies)
+            if tools is not None:
+                result['toolBodyNames'] = [dump_body_ref(tools.item(i))
+                                            for i in range(safe(lambda: tools.count, 0) or 0)]
+            return result
+        data.update(read_with_rollback(item, timeline, read_combine) or {})
         is_new_comp = safe(lambda: entity.isNewComponent)
         if is_new_comp is not None:
             data['isNewComponent'] = is_new_comp
 
     elif class_type == 'adsk::fusion::SplitBodyFeature':
-        tool = safe(lambda: entity.splittingTool)
-        if tool is not None:
-            data['splittingToolName'] = safe(lambda: tool.name) or safe(lambda: tool.classType())
-        participants = safe(lambda: entity.participantBodies)
-        if participants is not None:
-            data['participantBodyNames'] = [dump_body_ref(participants.item(i))
-                                             for i in range(safe(lambda: participants.count, 0) or 0)]
+        def read_split():
+            result = {}
+            tool = safe(lambda: entity.splittingTool)
+            if tool is not None:
+                result['splittingToolName'] = safe(lambda: tool.name) or safe(lambda: tool.classType())
+            split_bodies = safe(lambda: entity.splitBodies)
+            if split_bodies is not None:
+                result['splitBodyNames'] = [dump_body_ref(split_bodies.item(i))
+                                             for i in range(safe(lambda: split_bodies.count, 0) or 0)]
+            return result
+        data.update(read_with_rollback(item, timeline, read_split) or {})
 
-    elif class_type == 'adsk::fusion::ConstructionPlane':
-        definition = safe(lambda: entity.definition)
-        if definition is not None:
-            def_data = {'classType': safe(lambda: definition.classType())}
-            offset = safe(lambda: definition.offset)
-            if offset is not None:
-                def_data['offset'] = dump_parameter(offset)
-            plane_entity = safe(lambda: definition.planarEntity)
-            if plane_entity is not None:
-                def_data['planarEntity'] = safe(lambda: plane_entity.name) or safe(lambda: plane_entity.classType())
-            data['definition'] = def_data
+    elif class_type == 'adsk::fusion::CopyPasteBody':
+        def read_copy_paste():
+            source = safe(lambda: entity.sourceBody)
+            if source is None:
+                return None
+            return {'sourceBodyNames': [dump_body_ref(source.item(i))
+                                         for i in range(safe(lambda: source.count, 0) or 0)]}
+        result = read_with_rollback(item, timeline, read_copy_paste)
+        if result:
+            data.update(result)
 
     return data
 
@@ -228,13 +270,16 @@ def dump_timeline(design, sketches_dir, exported_files):
                 entry['entity'] = dump_sketch(entity, sketches_dir, comp_name, exported_files)
             elif class_type == 'adsk::fusion::Occurrence':
                 entry['entity'] = dump_occurrence_entity(entity)
+            elif class_type == 'adsk::fusion::ConstructionPlane':
+                entry['entity'] = dump_construction_plane(entity)
             elif hasattr(entity, 'parameters') or 'Feature' in (class_type or ''):
-                entry['entity'] = dump_feature(entity, class_type)
+                entry['entity'] = dump_feature(entity, class_type, item, timeline)
             else:
                 entry['entity'] = {'classType': class_type, 'name': safe(lambda: entity.name)}
         except Exception:
             entry['entity'] = {'classType': class_type, 'error': traceback.format_exc()}
         items.append(entry)
+    timeline.moveToEnd()
     return items
 
 
