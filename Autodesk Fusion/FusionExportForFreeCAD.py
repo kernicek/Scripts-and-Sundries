@@ -233,6 +233,18 @@ def dump_sketch(entity, sketches_dir, comp_name, exported_files):
     plane = safe(lambda: entity.referencePlane)
     if plane is not None:
         data['referencePlane'] = safe(lambda: plane.name)
+    # origin/xDirection/yDirection fully define the sketch plane in model space
+    # regardless of whether it's on a named construction plane or a face - unlike
+    # referencePlane, which resolves to null for face-based sketches.
+    origin = safe(lambda: entity.origin)
+    if origin is not None:
+        data['origin'] = jsonable(origin)
+    x_dir = safe(lambda: entity.xDirection)
+    if x_dir is not None:
+        data['xDirection'] = jsonable(x_dir)
+    y_dir = safe(lambda: entity.yDirection)
+    if y_dir is not None:
+        data['yDirection'] = jsonable(y_dir)
     if ok:
         exported_files.append(full_path)
     return data
