@@ -22,7 +22,10 @@ you want to export first; the script then asks for an output folder and writes:
   construction plane offset/reference, and now which sketch/profile-region each extrude
   actually consumes via `ExtrudeFeature.profile` -> `parentSketch` + the profile's own
   bounding box - needed to disambiguate sketches with more than one closed region), each
-  sketch's plane placement in model space
+  sketch's plane placement in model space, and (new, see caveat below) every
+  geometry-changing timeline entry's `bodySnapshot` - the volume/bbox/appearance of every
+  body in the design immediately after that step, for verifying a manual rebuild step by
+  step instead of only against the final state
   (`origin`/`xDirection`/`yDirection` - needed to re-place the DXF correctly in 3D, since
   `referencePlane` alone resolves to null for sketches on a face rather than a named
   construction plane), component/body list (each body's name, visibility, appearance/
@@ -72,3 +75,8 @@ for dimensions.
   through the timeline as it runs (once per Combine/Split/Pattern/CopyPasteBody/Chamfer
   feature) - that's expected, not a hang; it's navigation only, nothing is edited, and the
   script always ends by moving the marker back to the end of the timeline.
+- `bodySnapshot` adds one more rollback (to just after each geometry-changing feature) and
+  a full pass over every body's volume/bbox/appearance/material at that point - for a design
+  with many bodies and many timeline steps this multiplies out and makes the export
+  noticeably slower than everything else in this script combined. Worth it for verifying a
+  manual FreeCAD rebuild step by step, but expect the run to take a while on a complex design.

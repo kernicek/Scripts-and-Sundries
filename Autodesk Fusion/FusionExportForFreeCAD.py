@@ -84,13 +84,14 @@ def dump_edge_set(edge_set):
     return data
 
 
-def read_with_rollback(item, timeline, fn):
+def read_with_rollback(item, timeline, fn, roll_before=True):
     """Several Fusion properties (body/edge references consumed by later
     features) only resolve correctly with the timeline marker positioned
     immediately before the owning feature - see e.g. CombineFeature.targetBody.
-    Rolls back, reads, then always restores the marker to the end.
+    Rolls back (or forward to just after, with roll_before=False), reads, then
+    always restores the marker to the end.
     """
-    rolled = safe(lambda: item.rollTo(True))
+    rolled = safe(lambda: item.rollTo(roll_before))
     try:
         return safe(fn) if rolled else None
     finally:
@@ -311,6 +312,22 @@ def dump_timeline(design, sketches_dir, exported_files):
                 entry['entity'] = {'classType': class_type, 'name': safe(lambda: entity.name)}
         except Exception:
             entry['entity'] = {'classType': class_type, 'error': traceback.format_exc()}
+
+        # Snapshot every body's volume/bbox immediately after this feature runs, for
+        # step-by-step verification while rebuilding elsewhere - only for entries that
+        # can actually change geometry (not sketches/planes/occurrences).
+        if class_type not in (None, 'adsk::fusion::Sketch', 'adsk::fusion::Occurrence',
+                               'adsk::fusion::ConstructionPlane'):
+            def read_body_snapshot():
+                bodies = []
+                for comp in design.allComponents:
+                    for b in comp.bRepBodies:
+                        bodies.append(dump_body(b))
+                return bodies
+            snapshot = read_with_rollback(item, timeline, read_body_snapshot, roll_before=False)
+            if snapshot is not None:
+                entry['bodySnapshot'] = snapshot
+
         items.append(entry)
     timeline.moveToEnd()
     return items
