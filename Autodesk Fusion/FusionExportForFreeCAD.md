@@ -8,7 +8,9 @@ models), so this gets you the raw material for a manual rebuild rather than a on
 
 Fusion -> Utilities tab -> Scripts and Add-Ins -> Scripts -> "+" (Create) -> paste
 `FusionExportForFreeCAD.py`'s contents (or point Fusion at the file) -> Run. Open the design
-you want to export first; the script then asks for an output folder and writes:
+you want to export first; the script asks for a *parent* folder and creates a fresh,
+timestamped `YYYYMMDD HHMM Fusion export` subfolder under it each run (so repeated exports
+never collide or need a manually-typed name), containing:
 
 - `<design>.step` - whole design as one static solid (fit-check/printing use)
 - `<design>.f3d` - full Fusion archive (native format, includes the parametric feature
@@ -71,10 +73,11 @@ for dimensions.
   than appearance and should be preferred when present.
 - `volume`/`area`/`boundingBox` on each body are in the API's internal database units (cm,
   cm^3), not `lengthUnits` - convert when cross-checking against the design's own units.
-- The rollback described above means the export visibly scrubs the 3D view back and forth
-  through the timeline as it runs (once per Combine/Split/Pattern/CopyPasteBody/Chamfer
-  feature) - that's expected, not a hang; it's navigation only, nothing is edited, and the
-  script always ends by moving the marker back to the end of the timeline.
+- The rollback described above repositions the timeline marker back and forth once per
+  Combine/Split/Pattern/CopyPasteBody/Chamfer feature - in practice this does not visibly
+  redraw the 3D view while the script runs (checked 2026-09-09), just don't be alarmed if a
+  future Fusion version does start showing it - it's navigation only, nothing is edited, and
+  the script always ends by moving the marker back to the end of the timeline.
 - `bodySnapshot` adds one more rollback (to just after each geometry-changing feature) and
   a full pass over every body's volume/bbox/appearance/material at that point - for a design
   with many bodies and many timeline steps this multiplies out and makes the export

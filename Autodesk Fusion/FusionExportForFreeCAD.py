@@ -4,6 +4,7 @@ See FusionExportForFreeCAD.md for what it writes and how to run it.
 
 import adsk.core
 import adsk.fusion
+import datetime
 import json
 import os
 import re
@@ -419,10 +420,11 @@ def run(context):
             return
 
         folder_dlg = ui.createFolderDialog()
-        folder_dlg.title = 'Choose export folder for FreeCAD hand-off'
+        folder_dlg.title = 'Choose parent folder for FreeCAD hand-off export'
         if folder_dlg.showDialog() != adsk.core.DialogResults.DialogOK:
             return
-        out_dir = folder_dlg.folder
+        timestamp = datetime.datetime.now().strftime('%Y%m%d %H%M')
+        out_dir = os.path.join(folder_dlg.folder, '%s Fusion export' % timestamp)
         sketches_dir = os.path.join(out_dir, 'sketches')
         os.makedirs(sketches_dir, exist_ok=True)
 
