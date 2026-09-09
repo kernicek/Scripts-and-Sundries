@@ -318,15 +318,23 @@ def dump_timeline(design, sketches_dir, exported_files):
         # can actually change geometry (not sketches/planes/occurrences).
         if class_type not in (None, 'adsk::fusion::Sketch', 'adsk::fusion::Occurrence',
                                'adsk::fusion::ConstructionPlane'):
-            def read_body_snapshot():
-                bodies = []
-                for comp in design.allComponents:
-                    for b in comp.bRepBodies:
-                        bodies.append(dump_body(b))
-                return bodies
-            snapshot = read_with_rollback(item, timeline, read_body_snapshot, roll_before=False)
-            if snapshot is not None:
-                entry['bodySnapshot'] = snapshot
+            # Not using read_with_rollback/safe() here on purpose: the first version of
+            # this silently produced zero snapshots for all 83 entries with no clue why.
+            # Report the real cause instead of swallowing it.
+            try:
+                rolled = item.rollTo(False)
+                if rolled:
+                    bodies = []
+                    for comp in design.allComponents:
+                        for b in comp.bRepBodies:
+                            bodies.append(dump_body(b))
+                    entry['bodySnapshot'] = bodies
+                else:
+                    entry['bodySnapshotError'] = 'item.rollTo(False) returned False'
+            except Exception:
+                entry['bodySnapshotError'] = traceback.format_exc()
+            finally:
+                safe(lambda: timeline.moveToEnd())
 
         items.append(entry)
     timeline.moveToEnd()
